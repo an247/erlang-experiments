@@ -1,5 +1,5 @@
 -module(whisper). 
--export([start/2,start/1,listen/2,listen/1]). 
+-export([start/3,start/2,listen/2,listen/3]). 
 
 getFullDict() -> 
 [{1,"AARDVARK","Ad/vAk",2},
@@ -11863,63 +11863,55 @@ getFullDict() ->
 {34645,"ZWIEBACK","zwi/b&k",2}]. 
 
 
-%Assuming that the spawner supplies both knowledge factor and hearing factor
-
-listGetFirst(List) ->
-	[First | _Rest] = List, First. 
 
 
-start(HearingFactor, Neighbour) -> spawn(whisper, listen, [HearingFactor, Neighbour]).
-start(HearingFactor) -> spawn(whisper, listen, [HearingFactor]). 
+start(PlayerNum, HearingFactor, Neighbour) -> spawn(whisper, listen, [PlayerNum, HearingFactor, Neighbour]).
+start(PlayerNum, HearingFactor) -> spawn(whisper, listen, [PlayerNum, HearingFactor]). 
 
 
-listen(HearingFactor) -> 
+listen(PlayerNum, HearingFactor) -> 
 	receive
 		{_From, Word} -> 
 			Heard = getWord(Word, HearingFactor), 
-			io:format("AA~ts~n",[Heard]),
-			listen(HearingFactor)
+			io:format("Player ~p heard ~ts~n",[PlayerNum, Heard]),
+			listen(PlayerNum, HearingFactor)
 	end. 
 
 
-listen(HearingFactor, Neighbour) -> 
+listen(PlayerNum, HearingFactor, Neighbour) -> 
 	receive
 		{_From, Word} -> 
-			io:format("~ts~n",[Word]),
 			Heard = getWord(Word, HearingFactor), 
-			io:format("~ts~n",[Heard]),
+			io:format("Player ~p heard ~ts~n",[PlayerNum, Heard]),
 			tell(Neighbour, Heard),
-			listen(HearingFactor, Neighbour)
+			listen(PlayerNum, HearingFactor, Neighbour)
 	end. 
 
 tell(Neighbour, Heard) ->
-	%io:format("coming~n",[]), 
 	Neighbour ! {self(),Heard}. 	
 
 
+%Utility to get first element of list
+listGetFirst(List) ->
+	[First | _Rest] = List, First. 
 
 getWord(Word, HearingFactor) -> 
 	{_Word, Syllables} = findWordSyllables(Word),
-	%io:format("~p~n",[Syllables]),
 	findHeard(Syllables, HearingFactor). 
 
 findWordSyllables(Word) -> 
    listGetFirst([{WordI, Syllables} || {_Index, WordI, Syllables, _SyllableCount} <- getFullDict(), WordI == Word]).  
 
-doesSyllableMatch(Syllables1, Syllables2, HearingFactor, HearingProbability) when HearingProbability>=HearingFactor -> Syllables1 == Syllables2; 
-doesSyllableMatch(Syllables1, Syllables2, _HearingFactor, _HearingProbability) ->
-	%io:format("hey~n",[]),
-	SyllableList1 = string:split(Syllables1, "/"),
-	%io:format("~p~n",[SyllableList1]),
-	SyllableList2 = string:split(Syllables2, "/"),
-	%io:format("~p~n",[SyllableList2]),
-	DiffList=lists:subtract(SyllableList1, SyllableList2),
-	%io:format("~p~n",[DiffList]),
-	length(DiffList) == 1. 		
+doesSyllableMatchInSection(Syllables1, Syllables2, HearingFactor, HearingProbability, _Index, _DictLength, _DictSectionMatch) when HearingProbability>=HearingFactor -> Syllables1 == Syllables2; 
+doesSyllableMatchInSection(Syllables1, Syllables2, _HearingFactor, _HearingProbability, Index, DictLength, DictSectionMatch) ->
+	[Word1Syllable1|[Word1Syllable2|[]]] = string:split(Syllables1, "/"),
+	[Word2Syllable1|[Word2Syllable2|[]]] = string:split(Syllables2, "/"),
+	(Word1Syllable1 == Word2Syllable1 orelse Word1Syllable2 == Word2Syllable2) andalso (Index >= DictSectionMatch*DictLength/3 andalso Index =< (DictSectionMatch+1)*DictLength/3). 		
 
 findHeard(Syllables, HearingFactor) -> 
 	HearingProbability = rand:uniform(),
-	%io:format("~p~n",[HearingProbability]),
-	listGetFirst([WordI || {_Index, WordI, SyllablesI, _SyllableCount} <- getFullDict(), doesSyllableMatch(SyllablesI, Syllables, HearingFactor, HearingProbability)]). 
+	DictLength = length(getFullDict()),
+	DictSectionMatch = rand:uniform(3),
+	listGetFirst([WordI || {Index, WordI, SyllablesI, _SyllableCount} <- getFullDict(), doesSyllableMatchInSection(SyllablesI, Syllables, HearingFactor, HearingProbability, Index, DictLength, DictSectionMatch)]). 
 
 
